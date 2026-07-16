@@ -54,3 +54,19 @@ def save_character(character_data: dict, worksheet=None) -> dict:
         return {"status": "error", "message": f"failed to write row: {exc}"}
 
     return {"status": "success", "id": char_id}
+
+def list_characters(player: str = None, worksheet=None) -> dict:
+    """
+    Returns all character records, optionally filtered by player.
+
+    Returns:
+        {"status": "success", "data": [ {...record...}, ... ]}
+    """
+    if worksheet is None:
+        worksheet = get_worksheet()
+
+    records = worksheet.get_all_records()
+    if player:
+        records = [r for r in records if r.get("player") == player]
+
+    return {"status": "success", "data": records}
