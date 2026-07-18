@@ -1,4 +1,4 @@
-from src.storage.storage_handler import save_character
+from src.storage.storage_handler import save_character, list_characters
 
 class FakeWorksheet:
     def __init__(self, existing_records=None):
@@ -33,7 +33,6 @@ def test_save_character_duplicate():
     assert result == {"status": "exists", "message": "duplicate character name for this player"}
     assert len(ws.appended_rows) == 0
 
-
 def test_save_character_missing_fields():
     ws = FakeWorksheet(existing_records=[])
     incomplete = {"name": "Feilong", "player": "Andy"}
@@ -41,8 +40,39 @@ def test_save_character_missing_fields():
     assert result["status"] == "error"
     assert len(ws.appended_rows) == 0
 
-
 def test_save_character_allows_same_name_different_player():
     ws = FakeWorksheet(existing_records=[{"name": "Feilong", "player": "SomeoneElse"}])
     result = save_character(VALID_CHARACTER, worksheet=ws)
     assert result["status"] == "success"
+
+def test_save_character_write_failure_returns_error():
+    """Covers the except branch: append_row raising should surface as 'error', not crash."""
+    class BrokenWorksheet(FakeWorksheet):
+        def append_row(self, row):
+            raise RuntimeError("simulated Sheets API failure")
+
+    ws = BrokenWorksheet(existing_records=[])
+    result = save_character(VALID_CHARACTER, worksheet=ws)
+
+    assert result["status"] == "error"
+    assert "simulated Sheets API failure" in result["message"]
+
+def test_list_characters_returns_all_when_no_player_filter():
+    ws = FakeWorksheet(existing_records=[
+        {"name": "Feilong", "player": "Andy"},
+        {"name": "Grog", "player": "Sam"},
+    ])
+    result = list_characters(worksheet=ws)
+
+    assert result["status"] == "success"
+    assert len(result["data"]) == 2
+
+def test_list_characters_filters_by_player():
+    ws = FakeWorksheet(existing_records=[
+        {"name": "Feilong", "player": "Andy"},
+        {"name": "Grog", "player": "Sam"},
+    ])
+    result = list_characters(player="Andy", worksheet=ws)
+
+    assert result["status"] == "success"
+    assert result["data"] == [{"name": "Feilong", "player": "Andy"}]

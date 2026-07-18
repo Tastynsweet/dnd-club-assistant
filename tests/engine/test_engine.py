@@ -2,10 +2,6 @@ from unittest.mock import patch
 
 from src.engine.engine import process_request
 
-
-# ---------------------------------------------------------------------------
-# Test 1: Register success
-
 @patch("src.engine.engine.save_character")
 @patch("src.engine.engine._reflect")
 @patch("src.engine.engine._extract_intent")
@@ -25,10 +21,6 @@ def test_register_success(mock_extract, mock_reflect, mock_save):
     assert result["status"] == "success"
     mock_save.assert_called_once()
 
-
-# ---------------------------------------------------------------------------
-# Test 2: Register duplicate
-# ---------------------------------------------------------------------------
 @patch("src.engine.engine.save_character")
 @patch("src.engine.engine._reflect")
 @patch("src.engine.engine._extract_intent")
@@ -47,10 +39,6 @@ def test_register_duplicate(mock_extract, mock_reflect, mock_save):
 
     assert result["status"] == "exists"
 
-
-# ---------------------------------------------------------------------------
-# Test 3: List characters
-# ---------------------------------------------------------------------------
 @patch("src.engine.engine.list_characters")
 @patch("src.engine.engine._extract_intent")
 def test_list_characters(mock_extract, mock_list):
@@ -62,10 +50,6 @@ def test_list_characters(mock_extract, mock_list):
     assert result["status"] == "success"
     assert result["data"] == [{"name": "Feilong", "player": "Andy"}]
 
-
-# ---------------------------------------------------------------------------
-# Test 4: Reflection blocks incomplete input -- storage is NEVER called
-# ---------------------------------------------------------------------------
 @patch("src.engine.engine.save_character")
 @patch("src.engine.engine._reflect")
 @patch("src.engine.engine._extract_intent")
@@ -81,10 +65,6 @@ def test_reflection_blocks_incomplete_input(mock_extract, mock_reflect, mock_sav
     assert result["status"] == "incomplete"
     mock_save.assert_not_called()
 
-
-# ---------------------------------------------------------------------------
-# Test 5: Unknown intent
-# ---------------------------------------------------------------------------
 @patch("src.engine.engine._extract_intent")
 def test_unknown_intent(mock_extract):
     mock_extract.return_value = {"intent": None, "data": {}}
@@ -92,3 +72,35 @@ def test_unknown_intent(mock_extract):
     result = process_request("What's the weather like today?")
 
     assert result["status"] == "unknown"
+
+@patch("src.engine.engine.list_characters")
+@patch("src.engine.engine._extract_intent")
+def test_list_characters_error_passthrough(mock_extract, mock_list):
+    mock_extract.return_value = {"intent": "list", "data": {}}
+    mock_list.return_value = {"status": "error", "message": "sheet unreachable"}
+
+    result = process_request("Show me all my characters.")
+
+    assert result == {"status": "error", "message": "sheet unreachable"}
+
+@patch("src.engine.engine._get_client")
+def test_extract_intent_parses_model_json_response(mock_get_client):
+    from src.engine.engine import _extract_intent
+
+    fake_response = type("FakeResponse", (), {"text": '{"intent": "list", "data": {}}'})()
+    mock_get_client.return_value.models.generate_content.return_value = fake_response
+
+    result = _extract_intent("Show me all my characters.")
+
+    assert result == {"intent": "list", "data": {}}
+
+@patch("src.engine.engine._get_client")
+def test_reflect_parses_model_json_response(mock_get_client):
+    from src.engine.engine import _reflect
+
+    fake_response = type("FakeResponse", (), {"text": '{"complete": true, "missing": []}'})()
+    mock_get_client.return_value.models.generate_content.return_value = fake_response
+
+    result = _reflect("register", {"name": "Feilong"})
+
+    assert result == {"complete": True, "missing": []}

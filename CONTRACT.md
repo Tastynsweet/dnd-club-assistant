@@ -104,3 +104,19 @@ For each functionality, map responsibilities to components.
 - Input payload: {"day": "Saturday", "preference_tags": ["low-level", "one-shot"]}
 - Return payload/status: {"status": "success", "data": {"campaigns": ["camp_012", "camp_019"]}}
 - Failure statuses: {"status": "no_match", "message": "no campaigns found for this schedule/preference"}
+
+## Part D: Implementation Notes (Lab 6–7 Evolution)
+
+The interface/engine contract evolved from the original Part C design during implementation:
+
+- `parse_character_sheet(raw_text)` was superseded by a single unified entry point,
+  `process_request(user_input: str) -> dict`, which handles both character registration
+  and character listing under one function using LLM-based intent classification
+  (Tool Use pattern) rather than separate typed functions per intent.
+- A new `engine -> storage` function, `list_characters(player: str = None) -> response_payload`,
+  was added to support the "list my characters" intent. Return payload:
+  `{"status": "success", "data": [...]}`.
+- `save_character` gained an independent required-keys check inside the storage layer
+  itself (in addition to the engine's Reflection step), as defense-in-depth: even if the
+  engine's Reflection call is ever bypassed or misconfigured, storage will not silently
+  accept an incomplete record.
