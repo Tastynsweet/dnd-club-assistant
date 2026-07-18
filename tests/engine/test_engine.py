@@ -5,7 +5,7 @@ from src.engine.engine import process_request
 
 # ---------------------------------------------------------------------------
 # Test 1: Register success
-# ---------------------------------------------------------------------------
+
 @patch("src.engine.engine.save_character")
 @patch("src.engine.engine._reflect")
 @patch("src.engine.engine._extract_intent")
@@ -72,7 +72,7 @@ def test_list_characters(mock_extract, mock_list):
 def test_reflection_blocks_incomplete_input(mock_extract, mock_reflect, mock_save):
     mock_extract.return_value = {
         "intent": "register",
-        "data": {"name": "Bob"},  # missing player, class, level, stats
+        "data": {"name": "Bob"},
     }
     mock_reflect.return_value = {"complete": False, "missing": ["player", "class", "level", "stats"]}
 

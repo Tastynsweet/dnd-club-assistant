@@ -13,7 +13,6 @@ REQUIRED_KEYS = ["name", "player", "class", "level", "stats"]
 
 
 def get_worksheet(sheet_name="Characters", spreadsheet_key="1thahE8pmZmuO7Jr6Do3Y-vqUK2H-VhR2ahQKmIU2Pao"):
-    """Real auth path — only used in production, never in tests."""
     creds = Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
     client = gspread.authorize(creds)
     spreadsheet = (
@@ -28,9 +27,8 @@ def save_character(character_data: dict, worksheet=None) -> dict:
         return {"status": "error", "message": f"missing required keys: {missing}"}
 
     if worksheet is None:
-        worksheet = get_worksheet(sheet_name="Characters")  # default tab name; adjust if you renamed it
-
-    # duplicate check on (name, player), read BEFORE writing
+        worksheet = get_worksheet(sheet_name="Characters")
+    
     existing_records = worksheet.get_all_records()
     for record in existing_records:
         if (record.get("name") == character_data["name"]
@@ -56,12 +54,6 @@ def save_character(character_data: dict, worksheet=None) -> dict:
     return {"status": "success", "id": char_id}
 
 def list_characters(player: str = None, worksheet=None) -> dict:
-    """
-    Returns all character records, optionally filtered by player.
-
-    Returns:
-        {"status": "success", "data": [ {...record...}, ... ]}
-    """
     if worksheet is None:
         worksheet = get_worksheet()
 

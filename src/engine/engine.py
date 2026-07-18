@@ -14,8 +14,6 @@ _client = None
 
 
 def _get_client():
-    """Lazily creates the Gemini client. Never called during mocked unit tests,
-    since _extract_intent and _reflect are patched directly in tests."""
     global _client
     if _client is None:
         _client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
@@ -45,7 +43,6 @@ Respond with ONLY JSON, no markdown fences:
 """
 
 def _extract_intent(user_input: str) -> dict:
-    """Turn 1 of Tool Use: ask Gemini what the user wants and what data they gave."""
     response = _get_client().models.generate_content(
         model="gemini-2.5-flash",
         contents=EXTRACTION_PROMPT.format(user_input=user_input),
@@ -54,7 +51,6 @@ def _extract_intent(user_input: str) -> dict:
 
 
 def _reflect(intent: str, data: dict) -> dict:
-    """Reflection: a second call checks completeness before any write happens."""
     response = _get_client().models.generate_content(
         model="gemini-2.5-flash",
         contents=REFLECTION_PROMPT.format(data=json.dumps(data)),
@@ -63,16 +59,6 @@ def _reflect(intent: str, data: dict) -> dict:
 
 
 def process_request(user_input: str) -> dict:
-    """
-    Main engine entry point: interface -> engine -> storage.
-
-    Returns one of:
-        {"status": "success", "data": ...}
-        {"status": "exists", "message": ...}
-        {"status": "incomplete", "missing": [...]}
-        {"status": "unknown", "message": ...}
-        {"status": "error", "message": ...}
-    """
     extraction = _extract_intent(user_input)
     intent = extraction.get("intent")
     data = extraction.get("data", {})
@@ -80,13 +66,31 @@ def process_request(user_input: str) -> dict:
     if intent == "register":
         reflection = _reflect(intent, data)
         if not reflection.get("complete", False):
-            return {"status": "incomplete", "missing": reflection.get("missing", [])}
+            missing = reflection.get("missing", [])
+            return {
+                "status": "incomplete",
+                "message": "I need a bit more information before I can save that character.",
+                "missing": missing,
+            }
 
         result = save_character(data)
+        if result["status"] == "success":
+            return {
+                "status": "success",
+                "message": f"Saved {data.get('name')} for {data.get('player')}.",
+                "id": result["id"],
+            }
         return result
 
     if intent == "list":
         result = list_characters(player=data.get("player"))
+        if result["status"] == "success":
+            count = len(result["data"])
+            return {
+                "status": "success",
+                "message": f"Found {count} character(s).",
+                "data": result["data"],
+            }
         return result
 
     return {"status": "unknown", "message": "Could not determine what you're asking for."}
