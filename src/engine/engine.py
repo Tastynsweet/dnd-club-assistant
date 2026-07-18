@@ -1,8 +1,8 @@
 import json
 import os
 
+import anthropic
 from dotenv import load_dotenv
-from google import genai
 
 from src.storage.storage_handler import save_character, list_characters
 
@@ -16,7 +16,7 @@ _client = None
 def _get_client():
     global _client
     if _client is None:
-        _client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+        _client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
     return _client
 
 EXTRACTION_PROMPT = """You are extracting structured intent from a D&D club member's message.
@@ -43,20 +43,25 @@ Respond with ONLY JSON, no markdown fences:
 """
 
 def _extract_intent(user_input: str) -> dict:
-    response = _get_client().models.generate_content(
-        model="gemini-2.5-flash",
-        contents=EXTRACTION_PROMPT.format(user_input=user_input),
+    response = _get_client().messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=300,
+        messages=[
+            {"role": "user", "content": EXTRACTION_PROMPT.format(user_input=user_input)}
+        ]
     )
-    return json.loads(response.text)
+    return json.loads(response.content[0].text)
 
 
 def _reflect(intent: str, data: dict) -> dict:
-    response = _get_client().models.generate_content(
-        model="gemini-2.5-flash",
-        contents=REFLECTION_PROMPT.format(data=json.dumps(data)),
+    response = _get_client().messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=300,
+        messages=[
+            {"role": "user", "content": REFLECTION_PROMPT.format(data=json.dumps(data))}
+        ]
     )
-    return json.loads(response.text)
-
+    return json.loads(response.content[0].text)
 
 def process_request(user_input: str) -> dict:
     extraction = _extract_intent(user_input)

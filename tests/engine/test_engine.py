@@ -87,8 +87,9 @@ def test_list_characters_error_passthrough(mock_extract, mock_list):
 def test_extract_intent_parses_model_json_response(mock_get_client):
     from src.engine.engine import _extract_intent
 
-    fake_response = type("FakeResponse", (), {"text": '{"intent": "list", "data": {}}'})()
-    mock_get_client.return_value.models.generate_content.return_value = fake_response
+    fake_block = type("FakeBlock", (), {"text": '{"intent": "list", "data": {}}'})()
+    fake_response = type("FakeResponse", (), {"content": [fake_block]})()
+    mock_get_client.return_value.messages.create.return_value = fake_response
 
     result = _extract_intent("Show me all my characters.")
 
@@ -98,8 +99,9 @@ def test_extract_intent_parses_model_json_response(mock_get_client):
 def test_reflect_parses_model_json_response(mock_get_client):
     from src.engine.engine import _reflect
 
-    fake_response = type("FakeResponse", (), {"text": '{"complete": true, "missing": []}'})()
-    mock_get_client.return_value.models.generate_content.return_value = fake_response
+    fake_block = type("FakeBlock", (), {"text": '{"complete": true, "missing": []}'})()
+    fake_response = type("FakeResponse", (), {"content": [fake_block]})()
+    mock_get_client.return_value.messages.create.return_value = fake_response
 
     result = _reflect("register", {"name": "Feilong"})
 
