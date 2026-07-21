@@ -1,5 +1,3 @@
-# Task 2 Worksheet (Submission File)
-
 ## Project: D&D Club Agentic Assistant
 
 ## Part A: Functionality (2-4 Functionalities Required)
@@ -109,14 +107,15 @@ For each functionality, map responsibilities to components.
 
 The interface/engine contract evolved from the original Part C design during implementation:
 
-- `parse_character_sheet(raw_text)` was superseded by a single unified entry point,
-  `process_request(user_input: str) -> dict`, which handles both character registration
-  and character listing under one function using LLM-based intent classification
-  (Tool Use pattern) rather than separate typed functions per intent.
-- A new `engine -> storage` function, `list_characters(player: str = None) -> response_payload`,
-  was added to support the "list my characters" intent. Return payload:
-  `{"status": "success", "data": [...]}`.
-- `save_character` gained an independent required-keys check inside the storage layer
-  itself (in addition to the engine's Reflection step), as defense-in-depth: even if the
-  engine's Reflection call is ever bypassed or misconfigured, storage will not silently
-  accept an incomplete record.
+- `parse_character_sheet(raw_text)` was superseded by a single unified entry point, `process_request(user_input: str) -> dict`, which handles both character registration and character listing under one function using LLM-based intent classification (Tool Use pattern) rather than separate typed functions per intent.
+- A new `engine -> storage` function, `list_characters(player: str = None) -> response_payload`, was added to support the "list my characters" intent. Return payload: `{"status": "success", "data": [...]}`.
+- `save_character` gained an independent required-keys check inside the storage layer itself (in addition to the engine's Reflection step), as defense-in-depth: even if the engine's Reflection call is ever bypassed or misconfigured, storage will not silently accept an incomplete record.
+
+## Part E: Implementation Notes (Rules Lookup)
+
+Functionality 1 (Rules Lookup) was implemented with the following concrete design, building on the original Part C contract:
+
+- `retrieve_context(query_embedding, top_k)` is implemented in `src/storage/rules_handler.py` as local cosine-similarity search over a precomputed JSON index of SRD chunks (no live database or API call at query time).
+- Embeddings are generated with a local `sentence-transformers` model (`all-MiniLM-L6-v2`) rather than a hosted embeddings API, since Anthropic does not offer a first-party embeddings endpoint. This keeps retrieval entirely free and offline after the one-time index build.
+- `get_rules_answer(user_query)` in the engine layer embeds the question, retrieves the top 3 matching chunks, and asks Claude to synthesize a grounded answer citing the retrieved source. If no chunk clears the similarity threshold, it returns `{"status": "not_found", ...}` per the original contract's fallback rule.
+- The SRD source is chunked into ~800-character word-window segments with ~150-character overlap (`build_rules_index.py`), rather than by rule/section boundaries as originally envisioned in Part B, since reliable section-boundary detection from the PDF's extracted text was not feasible in the available time. This is a known simplification -- retrieval occasionally underperforms on questions spanning multiple rule sections.
