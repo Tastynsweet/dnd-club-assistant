@@ -1,10 +1,13 @@
 import json
 import os
+import re
 
 import anthropic
 from dotenv import load_dotenv
 
 from src.storage.storage_handler import save_character, list_characters
+from src.storage.rules_handler import retrieve_context
+from src.storage.embeddings import embed_text
 
 load_dotenv()
 
@@ -12,25 +15,35 @@ REQUIRED_CHARACTER_FIELDS = ["name", "player", "class", "level", "stats"]
 
 _client = None
 
-
 def _get_client():
     global _client
     if _client is None:
         _client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
     return _client
 
+def _parse_json_response(text: str) -> dict:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text)
+        text = text.strip()
+    return json.loads(text)
+
 EXTRACTION_PROMPT = """You are extracting structured intent from a D&D club member's message.
 Return ONLY JSON, no markdown fences, no preamble.
 
-Valid intents: "register" (create a new character), "list" (show characters), null (anything else).
+Valid intents: "register" (create a new character), "list" (show characters),
+"rules_question" (a question about D&D 5e rules), null (anything else).
 
 If intent is "register", extract any of these fields you can find: name, player, class, level, stats, inventory.
 Only include fields that were actually stated -- do not invent values.
 
+If intent is "rules_question", set data to {{"question": <the user's question, verbatim>}}.
+
 Message: {user_input}
 
 Respond with exactly this shape:
-{{"intent": "register" | "list" | null, "data": {{...}}}}
+{{"intent": "register" | "list" | "rules_question" | null, "data": {{...}}}}
 """
 
 REFLECTION_PROMPT = """You are validating whether a character registration has all required fields.
@@ -42,26 +55,68 @@ Respond with ONLY JSON, no markdown fences:
 {{"complete": true | false, "missing": [list of missing required field names]}}
 """
 
+RULES_ANSWER_PROMPT = """You are a D&D 5e rules assistant. Answer the question using ONLY the
+rulebook excerpts below. Do not use outside knowledge -- if the excerpts don't
+answer the question, say so.
+
+Question: {question}
+
+Rulebook excerpts:
+{context}
+
+Respond with ONLY JSON, no markdown fences:
+{{"answer": "<grounded answer citing what the excerpts say>", "source": "<the source label of the excerpt(s) you used>"}}
+"""
+
 def _extract_intent(user_input: str) -> dict:
     response = _get_client().messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=300,
-        messages=[
-            {"role": "user", "content": EXTRACTION_PROMPT.format(user_input=user_input)}
-        ]
+        messages=[{"role": "user", "content": EXTRACTION_PROMPT.format(user_input=user_input)}],
     )
-    return json.loads(response.content[0].text)
-
+    return _parse_json_response(response.content[0].text)
 
 def _reflect(intent: str, data: dict) -> dict:
+    """Reflection: a second call checks completeness before any write happens."""
     response = _get_client().messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=300,
-        messages=[
-            {"role": "user", "content": REFLECTION_PROMPT.format(data=json.dumps(data))}
-        ]
+        messages=[{"role": "user", "content": REFLECTION_PROMPT.format(data=json.dumps(data))}],
     )
-    return json.loads(response.content[0].text)
+    return _parse_json_response(response.content[0].text)
+
+def get_rules_answer(user_query: str) -> dict:
+    if not user_query or not user_query.strip():
+        return {"status": "empty_input", "message": "Please enter a question."}
+
+    query_embedding = embed_text(user_query)
+    retrieval = retrieve_context(query_embedding, top_k=3)
+
+    if retrieval["status"] == "no_match":
+        return {
+            "status": "not_found",
+            "message": "This isn't covered in the core rules; check with your DM.",
+        }
+
+    context = "\n\n---\n\n".join(
+        f"[{source}]\n{chunk}"
+        for chunk, source in zip(retrieval["data"]["chunks"], retrieval["data"]["sources"])
+    )
+
+    response = _get_client().messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=500,
+        messages=[{
+            "role": "user",
+            "content": RULES_ANSWER_PROMPT.format(question=user_query, context=context),
+        }],
+    )
+    parsed = _parse_json_response(response.content[0].text)
+
+    return {
+        "status": "success",
+        "data": {"answer": parsed["answer"], "source": parsed["source"]},
+    }
 
 def process_request(user_input: str) -> dict:
     extraction = _extract_intent(user_input)
@@ -95,6 +150,17 @@ def process_request(user_input: str) -> dict:
                 "status": "success",
                 "message": f"Found {count} character(s).",
                 "data": result["data"],
+            }
+        return result
+
+    if intent == "rules_question":
+        question = data.get("question", user_input)
+        result = get_rules_answer(question)
+        if result["status"] == "success":
+            return {
+                "status": "success",
+                "message": result["data"]["answer"],
+                "source": result["data"]["source"],
             }
         return result
 
