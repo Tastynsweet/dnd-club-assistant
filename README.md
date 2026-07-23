@@ -6,8 +6,7 @@ Currently supports:
 - **Character registration** — describe a character in plain language and the assistant extracts and saves the structured record.
 - **Character listing** — ask to see all characters, or filter by player.
 - **Rules lookup** — ask a D&D 5e rules question and get a grounded, cited answer retrieved from the official SRD (System Reference Document), using local embeddings for retrieval and Claude for answer synthesis.
-
-*(Campaign/DM Matchmaking is designed in `CONTRACT.md` but not yet implemented.)*
+- **Campaign/DM matchmaking** — describe your schedule and preferences and get a ranked list of matching campaigns, flagged if contact info is missing.
 
 ## Setup
 
@@ -28,6 +27,12 @@ Currently supports:
    python build_rules_index.py path/to/SRD-OGL_V5.1.pdf
    ```
    This downloads a small local embedding model (one-time) and produces `rules_index.json`. No API calls or cost are involved in this step -- retrieval runs entirely locally.
+
+5. **Campaigns sheet tab**: add a tab named `Campaigns` to the same Google Sheet, with header row:
+   ```
+   campaign_id    name    day    level_range    preference_tags    contact
+   ```
+   `preference_tags` is a comma-separated list (e.g. `low-level, one-shot`).
 
 ## How to Run
 
@@ -66,6 +71,13 @@ Assistant: Advantage does not stack. If multiple situations affect a roll and
 each one grants advantage, you still roll only one additional d20...
 ```
 
+**Campaign matchmaking:**
+```
+You: Looking for a Saturday campaign, prefer low-level one-shots.
+Assistant: Found 1 matching campaign(s).
+  - Lost Mine of Phandelver (Saturday, 1-5)
+```
+
 ## Project Structure
 
 | Path | Purpose |
@@ -73,7 +85,8 @@ each one grants advantage, you still roll only one additional d20...
 | `src/storage/storage_handler.py` | Persists character records to Google Sheets via `gspread` |
 | `src/storage/rules_handler.py` | Cosine-similarity retrieval over a local SRD embedding index |
 | `src/storage/embeddings.py` | Local embedding model wrapper (no API key, no network calls at query time) |
-| `src/engine/engine.py` | Tool Use (intent extraction) + Reflection (completeness check) + rules Q&A, dispatches to storage |
+| `src/storage/campaigns_handler.py` | Reads and ranks campaign records from Google Sheets by schedule/preference overlap |
+| `src/engine/engine.py` | Tool Use (intent extraction) + Reflection (completeness check) across all four intents, dispatches to storage |
 | `src/interface/cli.py` | Presentation layer — formats engine responses and runs the interactive session |
 | `build_rules_index.py` | One-time script: extracts, chunks, and embeds the SRD into `rules_index.json` |
 | `tests/storage/`, `tests/engine/`, `tests/interface/` | Unit tests per layer, all mocked (no live API/Sheets/model calls needed to run) |

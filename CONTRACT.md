@@ -119,3 +119,12 @@ Functionality 1 (Rules Lookup) was implemented with the following concrete desig
 - Embeddings are generated with a local `sentence-transformers` model (`all-MiniLM-L6-v2`) rather than a hosted embeddings API, since Anthropic does not offer a first-party embeddings endpoint. This keeps retrieval entirely free and offline after the one-time index build.
 - `get_rules_answer(user_query)` in the engine layer embeds the question, retrieves the top 3 matching chunks, and asks Claude to synthesize a grounded answer citing the retrieved source. If no chunk clears the similarity threshold, it returns `{"status": "not_found", ...}` per the original contract's fallback rule.
 - The SRD source is chunked into ~800-character word-window segments with ~150-character overlap (`build_rules_index.py`), rather than by rule/section boundaries as originally envisioned in Part B, since reliable section-boundary detection from the PDF's extracted text was not feasible in the available time. This is a known simplification -- retrieval occasionally underperforms on questions spanning multiple rule sections.
+
+## Part F: Implementation Notes (Campaign/DM Matchmaking)
+
+Functionality 3 was implemented as follows:
+
+- `query_campaigns_by_schedule(day, preference_tags)` is implemented in `src/storage/campaigns_handler.py`, reading from a `Campaigns` tab in the same Google Sheet as characters (columns: campaign_id, name, day, level_range, preference_tags, contact).
+- Matches are ranked by count of overlapping preference tags. A day filter is exact-match; if no preferences are given, ranking falls back to day match alone.
+- Per the original contract's edge case, a matched campaign missing contact info is flagged with `"incomplete_contact": true` on that record rather than silently omitted.
+- `find_campaign_match(request_text)` in the engine layer returns `"unclear_request"` when neither a day nor preferences could be extracted from the message, matching the original Part C failure case.
