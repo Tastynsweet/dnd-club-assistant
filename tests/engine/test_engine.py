@@ -188,3 +188,52 @@ def test_parse_json_response_handles_unfenced_json():
     result = _parse_json_response('{"intent": "list", "data": {}}')
 
     assert result == {"intent": "list", "data": {}}
+
+# Campaign/DM Matchmaking
+@patch("src.engine.engine.query_campaigns_by_schedule")
+def test_find_campaign_match_success(mock_query):
+    from src.engine.engine import find_campaign_match
+ 
+    mock_query.return_value = {
+        "status": "success",
+        "data": {"campaigns": [{"campaign_id": "camp_012", "name": "Lost Mine of Phandelver"}]},
+    }
+ 
+    result = find_campaign_match("Saturday one-shot please", day="Saturday", preference_tags=["one-shot"])
+ 
+    assert result["status"] == "success"
+    assert result["data"]["matches"][0]["campaign_id"] == "camp_012"
+ 
+def test_find_campaign_match_unclear_request_with_no_day_or_tags():
+    from src.engine.engine import find_campaign_match
+ 
+    result = find_campaign_match("hi there")
+ 
+    assert result["status"] == "unclear_request"
+ 
+@patch("src.engine.engine.query_campaigns_by_schedule")
+def test_find_campaign_match_no_match_passthrough(mock_query):
+    from src.engine.engine import find_campaign_match
+ 
+    mock_query.return_value = {"status": "no_match", "message": "no campaigns found for this schedule/preference"}
+ 
+    result = find_campaign_match("Sunday horror campaign", day="Sunday", preference_tags=["horror"])
+ 
+    assert result["status"] == "no_match"
+ 
+@patch("src.engine.engine.find_campaign_match")
+@patch("src.engine.engine._extract_intent")
+def test_process_request_dispatches_matchmaking(mock_extract, mock_match):
+    mock_extract.return_value = {
+        "intent": "matchmaking",
+        "data": {"day": "Saturday", "preference_tags": ["one-shot"]},
+    }
+    mock_match.return_value = {
+        "status": "success",
+        "data": {"matches": [{"campaign_id": "camp_012", "name": "Lost Mine of Phandelver"}]},
+    }
+ 
+    result = process_request("Looking for a Saturday one-shot")
+ 
+    assert result["status"] == "success"
+    assert result["data"][0]["campaign_id"] == "camp_012"

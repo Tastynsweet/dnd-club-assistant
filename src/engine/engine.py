@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from src.storage.storage_handler import save_character, list_characters
 from src.storage.rules_handler import retrieve_context
 from src.storage.embeddings import embed_text
+from src.storage.campaigns_handler import query_campaigns_by_schedule
 
 load_dotenv()
 
@@ -33,17 +34,23 @@ EXTRACTION_PROMPT = """You are extracting structured intent from a D&D club memb
 Return ONLY JSON, no markdown fences, no preamble.
 
 Valid intents: "register" (create a new character), "list" (show characters),
-"rules_question" (a question about D&D 5e rules), null (anything else).
+"rules_question" (a question about D&D 5e rules),
+"matchmaking" (looking for a campaign/DM based on schedule or preferences), null (anything else).
 
 If intent is "register", extract any of these fields you can find: name, player, class, level, stats, inventory.
 Only include fields that were actually stated -- do not invent values.
 
 If intent is "rules_question", set data to {{"question": <the user's question, verbatim>}}.
 
+If intent is "matchmaking", extract "day" (e.g. "Saturday") if stated, and "preference_tags"
+as a list of short lowercase keywords (e.g. ["low-level", "one-shot", "horror"]) based on what
+the user described wanting. Only include a day/tags that were actually implied -- do not invent values.
+If nothing usable can be extracted (no day AND no preferences), set intent to null instead.
+
 Message: {user_input}
 
 Respond with exactly this shape:
-{{"intent": "register" | "list" | "rules_question" | null, "data": {{...}}}}
+{{"intent": "register" | "list" | "rules_question" | "matchmaking" | null, "data": {{...}}}}
 """
 
 REFLECTION_PROMPT = """You are validating whether a character registration has all required fields.
@@ -77,7 +84,6 @@ def _extract_intent(user_input: str) -> dict:
     return _parse_json_response(response.content[0].text)
 
 def _reflect(intent: str, data: dict) -> dict:
-    """Reflection: a second call checks completeness before any write happens."""
     response = _get_client().messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=300,
@@ -118,6 +124,19 @@ def get_rules_answer(user_query: str) -> dict:
         "data": {"answer": parsed["answer"], "source": parsed["source"]},
     }
 
+def find_campaign_match(request_text: str, day: str = None, preference_tags: list = None) -> dict:
+    if not day and not preference_tags:
+        return {
+            "status": "unclear_request",
+            "message": "could not parse schedule or preferences",
+        }
+
+    result = query_campaigns_by_schedule(day=day, preference_tags=preference_tags)
+    if result["status"] == "no_match":
+        return result
+
+    return {"status": "success", "data": {"matches": result["data"]["campaigns"]}}
+
 def process_request(user_input: str) -> dict:
     extraction = _extract_intent(user_input)
     intent = extraction.get("intent")
@@ -141,7 +160,7 @@ def process_request(user_input: str) -> dict:
                 "id": result["id"],
             }
         return result
-
+    
     if intent == "list":
         result = list_characters(player=data.get("player"))
         if result["status"] == "success":
@@ -161,6 +180,17 @@ def process_request(user_input: str) -> dict:
                 "status": "success",
                 "message": result["data"]["answer"],
                 "source": result["data"]["source"],
+            }
+        return result
+
+    if intent == "matchmaking":
+        result = find_campaign_match(user_input, day=data.get("day"), preference_tags=data.get("preference_tags"))
+        if result["status"] == "success":
+            count = len(result["data"]["matches"])
+            return {
+                "status": "success",
+                "message": f"Found {count} matching campaign(s).",
+                "data": result["data"]["matches"],
             }
         return result
 

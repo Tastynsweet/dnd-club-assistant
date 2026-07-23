@@ -3,9 +3,10 @@ from src.engine.engine import process_request
 _HELP_TEXT = (
     "I can help you with:\n"
     "  - Register a new character, e.g. \"Register Feilong, a level 4 Monk played by Andy.\"\n"
-    "  - List characters, e.g. \"Show me all my characters.\""
+    "  - List characters, e.g. \"Show me all my characters.\"\n"
+    "  - Ask a rules question, e.g. \"How does advantage stack?\"\n"
+    "  - Find a campaign, e.g. \"Looking for a Saturday campaign, prefer low-level one-shots.\""
 )
-
 
 def format_response(result: dict) -> str:
     status = result.get("status")
@@ -15,8 +16,15 @@ def format_response(result: dict) -> str:
         data = result.get("data")
         if isinstance(data, list) and data:
             for item in data:
-                lines.append(f"  - {item.get('name')} ({item.get('player')})")
-        return "\n".join(lines)
+                if "day" in item or "campaign_id" in item:
+                    # Campaign match, not a character record.
+                    line = f"  - {item.get('name')} ({item.get('day', '?')}, {item.get('level_range', '?')})"
+                    if item.get("incomplete_contact"):
+                        line += "  [no contact info on file]"
+                    lines.append(line)
+                else:
+                    lines.append(f"  - {item.get('name')} ({item.get('player')})")
+            return "\n".join(lines)
 
     if status == "exists":
         return result.get("message", "That character already exists.")
@@ -24,12 +32,14 @@ def format_response(result: dict) -> str:
     if status == "incomplete":
         missing = result.get("missing", [])
         return result.get("message", "Missing information.") + "\n  Missing: " + ", ".join(missing)
-
-    if status == "unknown":
+    
+    if status in ("unknown", "unclear_request"):
         return result.get("message", "I didn't understand that.") + "\n\n" + _HELP_TEXT
 
-    return result.get("message", "Unexpected response.")
+    if status == "no_match":
+        return result.get("message", "No matches found.")
 
+    return result.get("message", "Unexpected response.")
 
 def run_session(process_fn=None):
     if process_fn is None:
@@ -55,7 +65,6 @@ def run_session(process_fn=None):
         result = process_fn(user_input)
         print("Assistant: " + format_response(result))
         print()
-
 
 if __name__ == "__main__":
     run_session()

@@ -91,3 +91,43 @@ def test_run_session_skips_blank_lines(monkeypatch, capsys):
     run_session(process_fn=mock_process_fn)
 
     mock_process_fn.assert_not_called()
+
+def test_format_response_success_with_campaign_matches():
+    result = {
+        "status": "success",
+        "message": "Found 1 matching campaign(s).",
+        "data": [{
+            "campaign_id": "camp_012", "name": "Lost Mine of Phandelver",
+            "day": "Saturday", "level_range": "1-5", "incomplete_contact": False,
+        }],
+    }
+    output = format_response(result)
+ 
+    assert "Lost Mine of Phandelver" in output
+    assert "Saturday" in output
+
+def test_format_response_flags_incomplete_contact():
+    result = {
+        "status": "success",
+        "message": "Found 1 matching campaign(s).",
+        "data": [{
+            "campaign_id": "camp_019", "name": "Curse of Strahd",
+            "day": "Saturday", "level_range": "5-10", "incomplete_contact": True,
+        }],
+    }
+    output = format_response(result)
+ 
+    assert "no contact info" in output.lower()
+
+def test_format_response_unclear_request():
+    result = {"status": "unclear_request", "message": "could not parse schedule or preferences"}
+    output = format_response(result)
+ 
+    assert "could not parse" in output
+    assert "campaign" in output.lower()
+
+def test_format_response_no_match():
+    result = {"status": "no_match", "message": "no campaigns found for this schedule/preference"}
+    output = format_response(result)
+ 
+    assert "no campaigns found" in output
