@@ -1,11 +1,11 @@
-# D&D Club Agentic Assistant
+# D&D Session Assistant
 
-A conversational assistant for managing D&D club character sheets and answering rules questions, built with a three-layer architecture (interface → engine → storage) and powered by Claude Haiku 4.5 using the Tool Use and Reflection design patterns.
+A conversational D&D assistant for use both **during game sessions** (quick rules lookups without breaking the table's flow) and **between sessions** (managing character sheets, finding your next campaign). Built with a three-layer architecture (interface → engine → storage) and powered by Claude Haiku 4.5 using the Tool Use and Reflection design patterns.
 
 Currently supports:
+- **Rules lookup** — ask a D&D 5e rules question mid-session and get a grounded, cited answer retrieved from the official SRD (System Reference Document), using local embeddings for retrieval and Claude for answer synthesis.
 - **Character registration** — describe a character in plain language and the assistant extracts and saves the structured record.
 - **Character listing** — ask to see all characters, or filter by player.
-- **Rules lookup** — ask a D&D 5e rules question and get a grounded, cited answer retrieved from the official SRD (System Reference Document), using local embeddings for retrieval and Claude for answer synthesis.
 - **Campaign/DM matchmaking** — describe your schedule and preferences and get a ranked list of matching campaigns, flagged if contact info is missing.
 
 ## Setup
