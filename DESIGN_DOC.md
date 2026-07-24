@@ -2,12 +2,7 @@
 
 ## 1. Overview
 
-Architecture and implementation design for the D&D Session Assistant, a
-conversational agent built to be useful both during game sessions (quick
-rules lookups without breaking the table's flow) and between them (character
-management, finding your next campaign). Covers Rules Lookup, Character
-Sheet Management, and Campaign/DM Matchmaking. See `REQUIREMENTS_SPEC.md`
-for functional requirements.
+Architecture and implementation design for the D&D Session Assistant, a conversational agent built to be useful both during game sessions (quick rules lookups without breaking the table's flow) and between them (character management, finding your next campaign). Covers Rules Lookup, Character Sheet Management, and Campaign/DM Matchmaking. See `REQUIREMENTS_SPEC.md` for functional requirements.
 
 ## 2. Architecture
 
@@ -81,67 +76,31 @@ Google Sheets layout:
 - `interface -> engine`: `find_campaign_match(request_text, day, preference_tags) -> response_payload`
 - `engine -> storage`: `query_campaigns_by_schedule(day, preference_tags) -> response_payload`
 
-All three functionalities share a single `process_request(user_input: str)`
-entry point at the interface boundary (see Key Technical Decisions below);
-the per-functionality functions above are what the engine calls internally
-once intent is classified.
+All three functionalities share a single `process_request(user_input: str)` entry point at the interface boundary (see Key Technical Decisions below); the per-functionality functions above are what the engine calls internally once intent is classified.
 
 ## 5. Key Technical Decisions
 
 - **Unified engine entry point instead of one function per functionality.**
-  The original design specified a separate typed function per functionality
-  at the interface/engine boundary. The final implementation consolidates
-  these behind a single `process_request(user_input: str) -> dict`, which
-  uses one Claude call to classify intent across all cases and dispatches
-  internally. This reduced duplication in the interface layer and made
-  adding new intents a same-function extension rather than a new interface
-  method.
+  The original design specified a separate typed function per functionality at the interface/engine boundary. The final implementation consolidates these behind a single `process_request(user_input: str) -> dict`, which uses one Claude call to classify intent across all cases and dispatches internally. This reduced duplication in the interface layer and made adding new intents a same-function extension rather than a new interface method.
 
-- **Local embeddings instead of a hosted embeddings API.** Anthropic does
-  not offer a first-party embeddings endpoint. Rather than add a second paid
-  API dependency, retrieval embeddings are generated with a local
-  `sentence-transformers` model. Rules Lookup's retrieval step is entirely
-  free and runs offline after a one-time index build; only the final
-  answer-synthesis call uses the paid Claude API.
+- **Local embeddings instead of a hosted embeddings API.** 
+  Anthropic does not offer a first-party embeddings endpoint. Rather than add a second paid API dependency, retrieval embeddings are generated with a local `sentence-transformers` model. Rules Lookup's retrieval step is entirely free and runs offline after a one-time index build; only the final answer-synthesis call uses the paid Claude API.
 
-- **Word-window chunking instead of section-boundary chunking.** The SRD is
-  chunked into ~800-character word-window segments with ~150-character
-  overlap, rather than by rule/section boundaries as originally envisioned,
-  since reliable section-boundary detection from the PDF's extracted text
-  was not feasible in the available time. Known limitation: retrieval
-  occasionally underperforms on questions spanning multiple rule sections
-  (e.g. how the Grappled condition interacts with spellcasting).
+- **Word-window chunking instead of section-boundary chunking.** 
+  The SRD is chunked into ~800-character word-window segments with ~150-character overlap, rather than by rule/section boundaries as originally envisioned, since reliable section-boundary detection from the PDF's extracted text was not feasible in the available time. Known limitation: retrieval occasionally underperforms on questions spanning multiple rule sections (e.g. how the Grappled condition interacts with spellcasting).
 
-- **Campaign matchmaking is read-only by design.** Per the original
-  contract, the only `engine -> storage` function specified for
-  Functionality 3 is `query_campaigns_by_schedule` — there is no function to
-  create new campaign records through the assistant. Campaign data is
-  assumed to be seeded/managed outside the chat interface; the assistant's
-  role is purely to match against existing records.
+- **Campaign matchmaking is read-only by design.** 
+  Per the original contract, the only `engine -> storage` function specified for Functionality 3 is `query_campaigns_by_schedule` — there is no function to create new campaign records through the assistant. Campaign data is assumed to be seeded/managed outside the chat interface; the assistant's role is purely to match against existing records.
 
 - **Google Sheets and a local JSON file instead of a dedicated database.**
-  Both choices prioritize simplicity and zero infrastructure cost over
-  production scalability, an explicit tradeoff given project scope and
-  timeline. Google Sheets also provides a free, visual UI for debugging
-  character/campaign data during development.
+  Both choices prioritize simplicity and zero infrastructure cost over production scalability, an explicit tradeoff given project scope and timeline. Google Sheets also provides a free, visual UI for debugging character/campaign data during development.
 
-- **Defensive JSON parsing around all Claude responses.** Claude
-  occasionally wraps structured JSON output in markdown code fences
-  (` ```json ... ``` `) despite explicit prompt instructions not to. A
-  shared `_parse_json_response()` helper strips fences defensively before
-  parsing, discovered and fixed after live testing surfaced the failure
-  mode (see Testing Notes).
+- **Defensive JSON parsing around all Claude responses.** 
+  Claude occasionally wraps structured JSON output in markdown code fences (` ```json ... ``` `) despite explicit prompt instructions not to. A shared `_parse_json_response()` helper strips fences defensively before parsing, discovered and fixed after live testing surfaced the failure mode (see Testing Notes).
 
 ## 6. Testing Notes
 
-45 automated tests across all three layers, all using dependency injection
-and mocking (fake worksheets, fake embeddings, mocked Claude responses) —
-no test requires a live network call, live Google Sheets connection, or real
-API key to run. Coverage is 88% overall; the uncovered ~12% is limited to
-real-credential authentication code paths (Google Sheets auth, the Claude
-client constructor) that are intentionally excluded from unit testing and
-instead verified via a separate live connectivity check
-(`verify_connection.py`) and manual end-to-end walkthrough.
+45 automated tests across all three layers, all using dependency injection and mocking (fake worksheets, fake embeddings, mocked Claude responses). no test requires a live network call, live Google Sheets connection, or real API key to run. Coverage is 88% overall; the uncovered ~12% is limited to real-credential authentication code paths (Google Sheets auth, the Claude client constructor) that are intentionally excluded from unit testing and instead verified via a separate live connectivity check (`verify_connection.py`) and manual end-to-end walkthrough.
 
 ## 7. Known Limitations (Beyond Current Scope)
 

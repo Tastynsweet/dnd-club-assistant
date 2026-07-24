@@ -1,11 +1,7 @@
 # D&D Session Assistant - Requirements Specification
 
 ## Overview
-The D&D Session Assistant is a conversational LLM agent designed for use both
-during game sessions (quick rules lookups) and between them (managing
-characters, finding your next campaign). This builds on the Lab 4 worksheet
-submission; functional scope is unchanged, and is documented here for the
-final submission.
+The D&D Session Assistant is a conversational LLM agent designed for use both during game sessions (quick rules lookups) and between them (managing characters, finding your next campaign).
 
 ## Functional Requirements
 
